@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>Kalkulyator</title>
+<style>
+  :root{
+    --bg:#000000;
+    --num-btn:#333333;
+    --num-btn-active:#5c5c5c;
+    --func-btn:#a5a5a5;
+    --func-btn-text:#000000;
+    --func-btn-active:#d9d9d9;
+    --op-btn:#ff9f0a;
+    --op-btn-active:#ffc069;
+    --op-btn-selected:#ffffff;
+    --op-btn-selected-text:#ff9f0a;
+    --text:#ffffff;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    height:100%;
+    margin:0;
+    background:var(--bg);
+    overscroll-behavior:none;
+  }
+  body{
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    font-family:-apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    padding-bottom:env(safe-area-inset-bottom, 24px);
+    padding-top:env(safe-area-inset-top, 0);
+    user-select:none;
+  }
+  .calculator{
+    width:100%;
+    max-width:420px;
+    padding:0 12px;
+  }
+  .display{
+    display:flex;
+    align-items:flex-end;
+    justify-content:flex-end;
+    min-height:120px;
+    padding:0 14px 8px;
+  }
+  .display span{
+    color:var(--text);
+    font-size:clamp(48px, 15vw, 80px);
+    font-weight:300;
+    line-height:1;
+    letter-spacing:-1px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:clip;
+  }
+  .pad{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:12px;
+  }
+  button{
+    border:none;
+    outline:none;
+    aspect-ratio:1;
+    border-radius:50%;
+    font-size:clamp(24px, 7vw, 34px);
+    font-weight:400;
+    color:var(--text);
+    background:var(--num-btn);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0;
+    transition:background 0.08s ease;
+  }
+  button:active{ background:var(--num-btn-active); }
+
+  button.func{ background:var(--func-btn); color:var(--func-btn-text); font-size:clamp(20px, 6vw, 28px); }
+  button.func:active{ background:var(--func-btn-active); }
+
+  button.op{ background:var(--op-btn); font-size:clamp(28px, 8vw, 40px); font-weight:400; }
+  button.op:active{ background:var(--op-btn-active); }
+  button.op.selected{ background:var(--op-btn-selected); color:var(--op-btn-selected-text); }
+
+  button.zero{
+    grid-column:span 2;
+    aspect-ratio:auto;
+    border-radius:36px;
+    justify-content:flex-start;
+    padding-left:28px;
+  }
+</style>
+</head>
+<body>
+
+<div class="calculator">
+  <div class="display"><span id="display">0</span></div>
+  <div class="pad">
+    <button class="func" data-action="clear" id="clearBtn">AC</button>
+    <button class="func" data-action="sign">+/-</button>
+    <button class="func" data-action="percent">%</button>
+    <button class="op" data-action="divide">÷</button>
+
+    <button data-num="7">7</button>
+    <button data-num="8">8</button>
+    <button data-num="9">9</button>
+    <button class="op" data-action="multiply">×</button>
+
+    <button data-num="4">4</button>
+    <button data-num="5">5</button>
+    <button data-num="6">6</button>
+    <button class="op" data-action="subtract">−</button>
+
+    <button data-num="1">1</button>
+    <button data-num="2">2</button>
+    <button data-num="3">3</button>
+    <button class="op" data-action="add">+</button>
+
+    <button class="zero" data-num="0">0</button>
+    <button data-action="decimal">,</button>
+    <button class="op" data-action="equals">=</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const display = document.getElementById('display');
+  const clearBtn = document.getElementById('clearBtn');
+  const opButtons = document.querySelectorAll('.op');
+
+  let current = '0';
+  let previous = null;
+  let operator = null;
+  let justEvaluated = false;
+  let overwrite = true;
+
+  function formatNumber(numStr){
+    if (numStr === 'Xato') return numStr;
+    let [intPart, decPart] = numStr.split(',');
+    let neg = intPart.startsWith('-');
+    if (neg) intPart = intPart.slice(1);
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    let result = (neg ? '-' : '') + intPart + (decPart !== undefined ? ',' + decPart : '');
+    return result;
+  }
+
+  function updateDisplay(){
+    display.textContent = formatNumber(current);
+    clearBtn.textContent = (current !== '0' && !justEvaluated) ? 'C' : 'AC';
+  }
+
+  function clearAll(){
+    current = '0';
+    previous = null;
+    operator = null;
+    justEvaluated = false;
+    overwrite = true;
+    clearOpSelection();
+    updateDisplay();
+  }
+
+  function clearOpSelection(){
+    opButtons.forEach(b => b.classList.remove('selected'));
+  }
+
+  function inputDigit(d){
+    if (justEvaluated){
+      current = '0';
+      justEvaluated = false;
+      overwrite = true;
+    }
+    if (overwrite){
+      current = (d === '0') ? '0' : d;
+      overwrite = false;
+    } else {
+      if (current.replace('-','').replace(',','').length >= 9) return;
+      current = current === '0' ? d : current + d;
+    }
+    updateDisplay();
+  }
+
+  function inputDecimal(){
+    if (justEvaluated){
+      current = '0';
+      justEvaluated = false;
+      overwrite = false;
+    }
+    if (overwrite){
+      current = '0,';
+      overwrite = false;
+    } else if (!current.includes(',')){
+      current += ',';
+    }
+    updateDisplay();
+  }
+
+  function toggleSign(){
+    if (current === '0') return;
+    current = current.startsWith('-') ? current.slice(1) : '-' + current;
+    updateDisplay();
+  }
+
+  function toPercent(){
+    const val = parseFloat(current.replace(',', '.')) / 100;
+    current = numToStr(val);
+    overwrite = true;
+    updateDisplay();
+  }
+
+  function numToStr(n){
+    if (!isFinite(n)) return 'Xato';
+    let s = parseFloat(n.toPrecision(10)).toString();
+    return s.replace('.', ',');
+  }
+
+  function setOperator(op){
+    if (operator && !overwrite){
+      evaluate();
+    }
+    previous = current;
+    operator = op;
+    overwrite = true;
+    justEvaluated = false;
+    clearOpSelection();
+    document.querySelector(`.op[data-action="${op}"]`).classList.add('selected');
+  }
+
+  function evaluate(){
+    if (operator === null || previous === null) return;
+    const a = parseFloat(previous.replace(',', '.'));
+    const b = parseFloat(current.replace(',', '.'));
+    let result;
+    switch(operator){
+      case 'add': result = a + b; break;
+      case 'subtract': result = a - b; break;
+      case 'multiply': result = a * b; break;
+      case 'divide': result = b === 0 ? NaN : a / b; break;
+      default: return;
+    }
+    current = numToStr(result);
+    previous = null;
+    operator = null;
+    justEvaluated = true;
+    overwrite = true;
+    clearOpSelection();
+    updateDisplay();
+  }
+
+  document.querySelectorAll('button[data-num]').forEach(btn=>{
+    btn.addEventListener('click', ()=> inputDigit(btn.dataset.num));
+  });
+
+  document.querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const action = btn.dataset.action;
+      switch(action){
+        case 'clear': clearAll(); break;
+        case 'sign': toggleSign(); break;
+        case 'percent': toPercent(); break;
+        case 'decimal': inputDecimal(); break;
+        case 'equals': evaluate(); break;
+        case 'add': case 'subtract': case 'multiply': case 'divide':
+          setOperator(action); break;
+      }
+    });
+  });
+
+  updateDisplay();
+})();
+</script>
+
+</body>
+</html>
